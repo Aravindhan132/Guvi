@@ -1,0 +1,184 @@
+//
+//  ViewController.swift
+//  Face detector
+//
+//  Created by Rathish Marthandan T on 17/10/18.
+//  Copyright © 2018 Rathish Marthandan T. All rights reserved.
+//
+
+import UIKit
+import Vision
+
+class ViewController: UIViewController {
+    
+    @IBOutlet var faceDetectorTable:UITableView!
+    
+    var profileImageStack = [UIImage]()
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Do any additional setup after loading the view, typically from a nib.
+        faceDetectorTable.dataSource = self
+        faceDetectorTable.delegate = self
+        for _ in 0..<24 {
+            self.profileImageStack.append(UIImage.init(named: "agent_1")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_2")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_3")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_4")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_5")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_6")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_7")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_9")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_10")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_11")!)
+            self.profileImageStack.append(UIImage.init(named: "agent_12")!)
+        }
+    }
+}
+extension ViewController : UITableViewDelegate, UITableViewDataSource {
+    func numberOfSections(in tableView: UITableView) -> Int {
+        return 1
+    }
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return 24
+    }
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        return 120
+    }
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath) as! DetectorCell
+        cell.normalimage.image = self.profileImageStack[indexPath.row]
+        cell.profileImageView.image = self.profileImageStack[indexPath.row]
+        DispatchQueue.main.async {
+            cell.profileImageView.DetectFace()
+        }
+        return cell
+    }
+}
+class DetectorCell: UITableViewCell {
+    @IBOutlet var profileImageView:UIImageView!
+    @IBOutlet weak var normalimage: UIImageView!
+    override func awakeFromNib() {
+        super.awakeFromNib()
+        
+        normalimage.layer.cornerRadius = normalimage.frame.height * 0.5
+        normalimage.layer.masksToBounds = true
+        
+        profileImageView.layer.cornerRadius = normalimage.frame.height * 0.5
+        profileImageView.layer.masksToBounds = true
+    }
+}
+extension UIImageView {
+    
+    public func DetectFace( ) {
+        DispatchQueue.main.async {
+            if self.image == nil {
+                return
+            }
+            var cImage = self.image!.ciImage
+            if cImage == nil {
+                cImage = CIImage(cgImage: self.image!.cgImage!)
+            }
+            let detector = CIDetector(ofType: CIDetectorTypeFace, context: nil, options: [CIDetectorAccuracy:CIDetectorAccuracyLow])
+            let features = detector!.features(in: cImage!)
+            let faces = detector?.features(in: cImage!) as! [CIFaceFeature]
+            print(faces)
+            if features.count > 0 {
+                print("found \(features.count) faces")
+                let imgSize = CGSize(width: Double(self.image!.cgImage!.width + 100), height: (Double(self.image!.cgImage!.height + 110 )))
+                self.applyFaceDetection(for: features, size: imgSize)
+            } else {
+                print("No faces found")
+                DispatchQueue.main.async {
+                    self.imageLayer().removeFromSuperlayer()
+                }
+            }
+        }
+        
+    }
+    private func applyFaceDetection(for features: [AnyObject], size: CGSize) {
+        var rect = CGRect.zero
+        var rightBorder = 0.0
+        var bottomBorder = 0.0
+        
+        for feature in features {
+            var oneRect = feature.bounds!
+            oneRect.origin.y = size.height - oneRect.origin.y - oneRect.size.height
+            rect.origin.x = min(oneRect.origin.x, rect.origin.x) 
+            rect.origin.y = min(oneRect.origin.y, rect.origin.y)
+            rightBorder = max(Double(oneRect.origin.x + oneRect.size.width), Double(rightBorder)) + 250
+            bottomBorder = max(Double(oneRect.origin.y + oneRect.size.height), Double(bottomBorder))
+         }
+        rect.size.width = CGFloat(rightBorder) - rect.origin.x
+        rect.size.height = CGFloat(bottomBorder) - rect.origin.y - 200
+        
+        var center = CGPoint(x: rect.origin.x + rect.size.width + 500 / 4.0 , y: rect.origin.y + rect.size.height + 500 / 2.0)
+        var offset = CGPoint.zero
+        var finalSize = size
+        
+        if size.width / size.height > bounds.size.width / bounds.size.height {
+            finalSize.height = self.bounds.size.height
+            finalSize.width = size.width/size.height * finalSize.height + 50
+            center.x = finalSize.width / size.width * center.x
+            center.y = finalSize.width / size.width * center.y
+
+            offset.x = center.x - self.bounds.size.width * 0.5
+            if (offset.x < 0) {
+                offset.x = 0
+            } else if (offset.x + self.bounds.size.width > finalSize.width) {
+                offset.x = finalSize.width - self.bounds.size.width
+            }
+            offset.x = -offset.x
+
+        } else {
+            finalSize.width = self.bounds.size.width
+            finalSize.height = size.height / size.width * finalSize.width
+            center.x = finalSize.width + 50 / size.width * center.x
+            center.y = finalSize.width / size.width * center.y
+
+            offset.y = center.y - self.bounds.size.height * CGFloat(1-0.618)
+            if offset.y < 0 {
+                offset.y = 0
+            } else if offset.y + self.bounds.size.height > finalSize.height {
+                finalSize.height = self.bounds.size.height
+                offset.y = finalSize.height
+            }
+            offset.y = -offset.y
+        }
+
+        let layer = self.imageLayer()
+        if finalSize.height > 105 {
+         layer.frame = CGRect(x: offset.x , y: offset.y, width: finalSize.width , height: finalSize.height + 100)
+        }
+        else {
+            layer.frame = CGRect(x: offset.x, y: offset.y, width: finalSize.width, height: finalSize.height)
+        }
+        layer.contents = self.image!.cgImage
+    }
+    
+    private func imageLayer() -> CALayer {
+        if let sublayers = layer.sublayers {
+            for layer in sublayers {
+                if layer.name == "FitImage" {
+                    return layer
+                }
+            }
+        }
+        let subLayer = CALayer()
+        subLayer.name = "FitImage"
+        subLayer.actions = ["contents":NSNull(), "bounds":NSNull(), "position":NSNull()]
+        layer.addSublayer(subLayer)
+        return subLayer
+    }
+    func calculate(name : String , value : String , data : String , name2 : String ) {
+        if data == "calue" {
+            print("value of the data is in circle format")
+        }
+        else if data == "constant" {
+            print("value of the data in the constant format")
+        }
+        else {
+            print("data is not founf")
+        }
+    }
+}
+
